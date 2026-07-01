@@ -1,0 +1,51 @@
+# Data and generated artifacts
+/dataset
+/dataset_yolo/
+/datasets/
+/runs/
+/training_logs/
+/results/*.csv
+events.out.tfevents.*
+*.cache
+*.log
+
+# Images and media
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
+*.tif
+*.tiff
+*.mp4
+*.avi
+*.mov
+
+# Model weights and exported artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.engine
+*.torchscript
+*.tflite
+*.mlpackage
+*.safetensors
+
+# Numeric/generated data
+*.npy
+*.npz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ultralytics/
+.coverage
+htmlcov/
+
+# Editors
+.idea/
+.vscode/
