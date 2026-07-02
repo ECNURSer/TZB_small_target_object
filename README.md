@@ -149,6 +149,18 @@ python train.py --model n --fold 0 --resume
 python train.py --model n --fold 0 --resume runs/yolo26n_obb_fold0/weights/epoch100.pt
 ```
 
+训练完整结束后，Ultralytics 会 strip `last.pt`/`best.pt` 中的 optimizer 和 epoch 状态，此时二者只能用于评估或微调，不能断点续训。若要把一个已完成的实验从 500 扩展到 600 个总 epoch，应使用最近的周期 checkpoint，并显式覆盖总轮数：
+
+```bash
+bash run.sh train-m \
+  --fold 0 \
+  --name yolo26m_obb_fold0_balanced_focal \
+  --epochs 600 \
+  --resume runs/yolo26m_obb_fold0_balanced_focal/weights/epoch490.pt
+```
+
+训练入口会检查 checkpoint 的 `epoch` 和 optimizer 状态；对已 strip 的权重执行 `--resume` 会直接报错，不会回退到默认数据集重新训练。
+
 ## TensorBoard
 
 训练开始后，目标实验目录会生成 `events.out.tfevents.*`。TensorBoard 必须明确指定包含该文件的目录：

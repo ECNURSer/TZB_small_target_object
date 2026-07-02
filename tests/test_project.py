@@ -8,7 +8,7 @@ import yaml
 
 from convert_to_yolo import CLASS_NAMES, convert_json, output_stem, write_data_yaml
 from experiment_results import append_result, metric_values, write_class_metrics
-from train import build_parser, load_config
+from train import build_parser, load_config, validate_resume_checkpoint
 from tools.compare_models import mean, std
 from ultralytics.utils.loss import v8DetectionLoss
 
@@ -65,6 +65,17 @@ def test_training_cli_exposes_stopping_and_checkpoint_controls():
     assert args.patience == 12
     assert args.save_period == 3
     assert args.resume == "checkpoint.pt"
+
+
+def test_resume_checkpoint_validation(tmp_path: Path):
+    resumable = tmp_path / "epoch10.pt"
+    torch.save({"epoch": 10, "optimizer": {"state": {}}}, resumable)
+    assert validate_resume_checkpoint(resumable)["epoch"] == 10
+
+    stripped = tmp_path / "last.pt"
+    torch.save({"epoch": -1, "optimizer": None}, stripped)
+    with __import__("pytest").raises(ValueError, match="epochN.pt"):
+        validate_resume_checkpoint(stripped)
 
 
 def test_convert_json_and_test_path(tmp_path: Path):

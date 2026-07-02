@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 
+import torch
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -56,6 +57,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--results-csv", type=Path, default=PROJECT_ROOT / "results" / "experiments.csv")
     parser.add_argument("--dry-run", action="store_true", help="只检查并打印最终配置")
     return parser
+
+
+def validate_resume_checkpoint(checkpoint: Path) -> dict:
+    """Load checkpoint metadata and reject inference-only or completed checkpoints."""
+    state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    epoch = state.get("epoch") if isinstance(state, dict) else None
+    optimizer = state.get("optimizer") if isinstance(state, dict) else None
+    if not isinstance(epoch, int) or epoch < 0 or optimizer is None:
+        raise ValueError(
+            f"断点不可续训: {checkpoint} 缺少有效 epoch/optimizer 状态。"
+            "该权重已完成训练或已被 strip；请改用最近的 epochN.pt。"
+        )
+    return state
 
 
 def main() -> None:
@@ -111,12 +125,15 @@ def main() -> None:
         )
         if not last_pt.is_file():
             raise FileNotFoundError(f"断点不存在: {last_pt}")
+        validate_resume_checkpoint(last_pt)
         model = YOLO(str(last_pt))
         resume_overrides = {
             key: config[key]
             for key in ("imgsz", "batch", "device", "workers", "cache", "patience", "save_period")
             if key in config
         }
+        if args.epochs is not None:
+            resume_overrides["epochs"] = args.epochs
         metrics = model.train(resume=True, **resume_overrides)
     else:
         model = YOLO(config.pop("model"))
