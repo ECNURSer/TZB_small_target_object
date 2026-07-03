@@ -15,9 +15,9 @@ from ultralytics.utils.loss import v8DetectionLoss
 
 def test_model_configs_use_official_yolo26_obb_weights():
     expected_runtime = {
-        "n": {"imgsz": 640, "batch": 144, "patience": 100},
-        "s": {"imgsz": 640, "batch": 288, "patience": 100},
-        "m": {"imgsz": 1024, "batch": 64, "patience": 80},
+        "n": {"imgsz": 640, "batch": 144, "patience": 100, "save_period": 10},
+        "s": {"imgsz": 640, "batch": 288, "patience": 100, "save_period": 10},
+        "m": {"imgsz": 1024, "batch": 72, "patience": 200, "save_period": 50},
     }
     for size in "nsm":
         config = load_config(size, 0)
@@ -28,7 +28,7 @@ def test_model_configs_use_official_yolo26_obb_weights():
         assert config["batch"] == expected_runtime[size]["batch"]
         assert config["cos_lr"] is (size == "m")
         assert config["save"] is True
-        assert config["save_period"] == 10
+        assert config["save_period"] == expected_runtime[size]["save_period"]
         assert config["plot_period"] == 50
 
     medium = load_config("m", 0)

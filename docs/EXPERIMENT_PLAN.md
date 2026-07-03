@@ -9,10 +9,10 @@
 
 ## 训练停止与权重保存
 
-- `patience: 100`：与 YOLO11 baseline 默认早停等待长度对齐；设置为 0 可关闭早停。
+- n/s 使用 `patience: 100`；m 长周期增强实验使用 `patience: 200`；设置为 0 可关闭早停。
 - `last.pt`：每次保存时覆盖，始终表示最新训练状态，可用于断点续训。
 - `best.pt`：验证 fitness 创造新高时覆盖，只保留当前最优模型。
-- `save_period: 10`：每 10 个 epoch 额外保留 `epochN.pt`，用于回溯中间权重。
+- n/s 使用 `save_period: 10`；m 的 1500 epoch 实验使用 `save_period: 50`，避免周期权重占用过多磁盘。
 
 ## 第一阶段
 
@@ -20,7 +20,7 @@
 |---|---|---:|---:|---:|---|
 | EXP-01 | yolo26n-obb.pt | 0 | 640 | 32 | 未运行 |
 | EXP-02 | yolo26s-obb.pt | 0 | 640 | 32 | 未运行 |
-| EXP-03 | yolo26m-obb.pt | 0 | 640 | 32 | 未运行 |
+| EXP-03 | yolo26m-obb.pt | 0 | 1024 | 72 | 待重新训练 |
 
 三种模型必须使用相同总 batch。若发生 OOM，将三者一起降到 16；不要让 TaskAlignedAssigner 回退到 CPU 后继续长时间训练。
 

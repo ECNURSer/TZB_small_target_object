@@ -13,7 +13,7 @@
 - 项目代码和 Conda 环境脚本已建立。
 - `dataset` 符号链接指向 `/data/work1/00_data/TZB/subject1/dataset`，原图读取自同级 `input_path`；不复制 25GB 原图。
 - 当前已有 fold 0 的 YOLO26n 训练结果；该实验续训时修改过输入尺寸和 batch，只作为探索结果，不作为严格公平基线。
-- YOLO26m 当前是面向小目标和长尾类别的增强实验，使用 `imgsz=1024`、全局 batch 64、AdamW 和 class-balanced Focal Loss。
+- YOLO26m 当前是面向小目标和长尾类别的增强实验，使用 `imgsz=1024`、全局 batch 72、AdamW 和 class-balanced Focal Loss。
 - 独立 test 评估要求 `test.json` 中包含真实 OBB 标注；无标注测试集只能运行 `predict.py`。
 
 ## 目录结构
@@ -123,7 +123,8 @@ bash run.sh train-n --fold 0
 `configs/yolo26m_obb.yaml` 当前采用以下关键设置：
 
 ```text
-imgsz=1024, batch=64, optimizer=AdamW, cos_lr=True
+epochs=1500, imgsz=1024, batch=72, optimizer=AdamW, cos_lr=True
+patience=200, save_period=50
 focal_gamma=1.5, focal_alpha=0.25, cls_pw=0.25
 mosaic=0.25, scale=0.25, flipud=0.5, close_mosaic=50
 ```
@@ -140,7 +141,7 @@ bash run.sh train-m --fold 0 --name yolo26m_obb_fold0_balanced_focal
 
 训练目录为 `runs/yolo26{n|s|m}_obb_fold{fold}/`。断点续训：
 
-默认启用早停（`patience=100`），每 10 个 epoch 保留一个 `epochN.pt`；`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
+配置默认启用早停；n/s 使用 `patience=100, save_period=10`，m 增强实验使用 `patience=200, save_period=50`。`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
 
 ```bash
 python train.py --model n --fold 0 --resume
@@ -149,17 +150,7 @@ python train.py --model n --fold 0 --resume
 python train.py --model n --fold 0 --resume runs/yolo26n_obb_fold0/weights/epoch100.pt
 ```
 
-训练完整结束后，Ultralytics 会 strip `last.pt`/`best.pt` 中的 optimizer 和 epoch 状态，此时二者只能用于评估或微调，不能断点续训。若要把一个已完成的实验从 500 扩展到 600 个总 epoch，应使用最近的周期 checkpoint，并显式覆盖总轮数：
-
-```bash
-bash run.sh train-m \
-  --fold 0 \
-  --name yolo26m_obb_fold0_balanced_focal \
-  --epochs 600 \
-  --resume runs/yolo26m_obb_fold0_balanced_focal/weights/epoch490.pt
-```
-
-训练入口会检查 checkpoint 的 `epoch` 和 optimizer 状态；对已 strip 的权重执行 `--resume` 会直接报错，不会回退到默认数据集重新训练。
+训练完整结束后，Ultralytics 会 strip `last.pt`/`best.pt` 中的 optimizer 和 epoch 状态，此时二者只能用于评估或微调，不能断点续训。训练入口会检查 checkpoint 的 `epoch` 和 optimizer 状态；对已 strip 的权重执行 `--resume` 会直接报错，不会回退到默认数据集重新训练。若要扩展已完成实验，只能从仍含 optimizer 的最近 `epochN.pt` 恢复，并通过 `--epochs` 指定新的总轮数。
 
 ## TensorBoard
 
