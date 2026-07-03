@@ -18,8 +18,8 @@ close_mosaic: 50
 amp: true
 patience: 200
 save: true
-save_period: 50
-plot_period: 50
+save_period: 100
+plot_period: 100
 seed: 42
 deterministic: true
 box: 7.5
