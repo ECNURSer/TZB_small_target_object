@@ -137,6 +137,65 @@ mosaic=0.25, scale=0.25, flipud=0.5, close_mosaic=50
 bash run.sh train-m --fold 0 --name yolo26m_obb_fold0_balanced_focal
 ```
 
+### 使用 tmux 后台训练
+
+启动前先确认 4-7 号 GPU 空闲：
+
+```bash
+nvidia-smi
+```
+
+创建训练会话：
+
+```bash
+tmux new -s yolo26m_train
+```
+
+进入 tmux 后加载环境并启动训练，同时将终端输出保存到独立日志：
+
+```bash
+source /home/dihan/miniconda3/etc/profile.d/conda.sh
+conda activate yolo26-obb
+cd /home/dihan/TZB-subject1-YOLO26-OBBV1.0
+
+bash run.sh train-m \
+  --fold 0 \
+  --name yolo26m_obb_fold0_balanced_focal \
+  2>&1 | tee /home/dihan/yolo26m_obb_fold0_balanced_focal.log
+```
+
+让训练留在后台并退出 tmux：先按 `Ctrl+B`，松开后再按 `D`。SSH 断开不会终止训练。
+
+```bash
+# 查看全部会话
+tmux ls
+
+# 重新进入训练会话
+tmux attach -t yolo26m_train
+
+# 不进入会话，直接查看训练日志
+tail -f /home/dihan/yolo26m_obb_fold0_balanced_focal.log
+```
+
+正常停止训练时，先进入会话再按 `Ctrl+C`，等待进程退出。仅在进程无法正常退出时强制删除会话：
+
+```bash
+tmux kill-session -t yolo26m_train
+```
+
+训练生成 events 文件后，可以创建单独的 TensorBoard 会话：
+
+```bash
+tmux new -s yolo26m_tb
+source /home/dihan/miniconda3/etc/profile.d/conda.sh
+conda activate yolo26-obb
+cd /home/dihan/TZB-subject1-YOLO26-OBBV1.0
+
+bash run.sh tensorboard \
+  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26m_obb_fold0_balanced_focal \
+  --port 6007
+```
+
 不要在同一组 GPU 上同时启动 n/s/m。显存不足时应把三个实验统一降到 `--batch 16`，保证比较条件一致。
 
 训练目录为 `runs/yolo26{n|s|m}_obb_fold{fold}/`。断点续训：
