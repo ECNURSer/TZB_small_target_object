@@ -203,6 +203,8 @@ class BaseTrainer:
             self.csv.unlink()
         self.plot_idx = [0, 1, 2]
         self.nan_recovery_attempts = 0
+        self.nonfinite_step_detected = False
+        self.nonfinite_step_reason = ""
 
     def add_callback(self, event: str, callback):
         """Append the given callback to the event's callback list."""
@@ -419,6 +421,8 @@ class BaseTrainer:
         self._oom_retries = 0  # OOM auto-reduce counter for first epoch
         while True:
             self.epoch = epoch
+            self.nonfinite_step_detected = False
+            self.nonfinite_step_reason = ""
             self.run_callbacks("on_train_epoch_start")
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")  # suppress 'Detected lr_scheduler.step() before optimizer.step()'
@@ -502,7 +506,8 @@ class BaseTrainer:
                     self.optimizer.zero_grad()
                     break  # restart epoch loop with reduced batch size
                 if ni - last_opt_step >= self.accumulate:
-                    self.optimizer_step()
+                    if not self.optimizer_step():
+                        break  # recover the complete epoch from the latest valid checkpoint
                     last_opt_step = ni
 
                     # Timed stopping
@@ -783,15 +788,62 @@ class BaseTrainer:
             self.model = self.get_model(cfg=cfg, weights=weights, verbose=RANK in {-1, 0})  # calls Model(cfg, weights)
         return ckpt
 
-    def optimizer_step(self):
-        """Perform a single step of the training optimizer with gradient clipping and EMA update."""
+    def _all_ranks_true(self, value: bool) -> bool:
+        """Return True only when every DDP rank reports a true value."""
+        if RANK == -1:
+            return value
+        flag = torch.tensor(value, dtype=torch.uint8, device=self.device)
+        dist.all_reduce(flag, op=dist.ReduceOp.MIN)
+        return bool(flag.item())
+
+    @staticmethod
+    def _tensors_finite(tensors) -> bool:
+        """Check floating-point tensors with one device synchronization."""
+        checks = [torch.isfinite(t).all() for t in tensors if t.is_floating_point()]
+        return not checks or bool(torch.stack(checks).all().item())
+
+    def _mark_nonfinite_step(self, reason: str) -> None:
+        """Record a numerical failure once so the epoch can be rolled back safely."""
+        self.nonfinite_step_detected = True
+        self.nonfinite_step_reason = reason
+        if RANK in {-1, 0}:
+            LOGGER.warning(f"Non-finite training state detected ({reason}); skipping EMA update and rolling back epoch")
+
+    def _model_buffers_finite(self) -> bool:
+        """Check floating model buffers on every rank."""
+        return self._all_ranks_true(self._tensors_finite(unwrap_model(self.model).buffers()))
+
+    def _skip_nonfinite_update(self, reason: str) -> bool:
+        """Skip a numerically unsafe optimizer update unless model buffers were also corrupted."""
+        self.optimizer.zero_grad()
+        if not self._model_buffers_finite():
+            self._mark_nonfinite_step(f"{reason}; model buffer is NaN/Inf")
+            return False
+        if RANK in {-1, 0}:
+            LOGGER.warning(f"{reason}; skipped optimizer and EMA update for this batch")
+        return True
+
+    def optimizer_step(self) -> bool:
+        """Perform one optimizer step, updating EMA only after all ranks pass finite checks."""
         self.scaler.unscale_(self.optimizer)  # unscale gradients
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
+        if not self._all_ranks_true(bool(torch.isfinite(grad_norm).item())):
+            self.scaler.update()
+            return self._skip_nonfinite_update("Gradient norm is NaN/Inf")
+
+        scale_before = self.scaler.get_scale()
         self.scaler.step(self.optimizer)
         self.scaler.update()
         self.optimizer.zero_grad()
+        if not self._all_ranks_true(not self.scaler.is_enabled() or self.scaler.get_scale() >= scale_before):
+            return self._skip_nonfinite_update("AMP GradScaler skipped the optimizer step")
+
+        if not self._model_buffers_finite():
+            self._mark_nonfinite_step("model buffer is NaN/Inf")
+            return False
         if self.ema:
             self.ema.update(self.model)
+        return True
 
     def preprocess_batch(self, batch):
         """Allow custom preprocessing of model inputs and ground truths depending on task type."""
@@ -969,20 +1021,28 @@ class BaseTrainer:
 
     def _handle_nan_recovery(self, epoch):
         """Detect and recover from NaN/Inf loss and fitness collapse by loading last checkpoint."""
-        loss_nan = self.loss is not None and not self.loss.isfinite()
+        loss_nan = self.loss is not None and not bool(self.loss.isfinite().item())
+        epoch_loss_nan = self.tloss is not None and not bool(torch.isfinite(self.tloss).all().item())
+        ema_nan = self.ema is not None and not self._tensors_finite(self.ema.ema.state_dict().values())
         fitness_nan = self.fitness is not None and not np.isfinite(self.fitness)
         fitness_collapse = self.best_fitness and self.best_fitness > 0 and self.fitness == 0
-        corrupted = RANK in {-1, 0} and loss_nan and (fitness_nan or fitness_collapse)
-        reason = "Loss NaN/Inf" if loss_nan else "Fitness NaN/Inf" if fitness_nan else "Fitness collapse"
+        corrupted = self.nonfinite_step_detected or loss_nan or epoch_loss_nan or ema_nan or fitness_nan or fitness_collapse
+        if self.nonfinite_step_reason:
+            reason = self.nonfinite_step_reason
+        elif loss_nan or epoch_loss_nan:
+            reason = "Loss NaN/Inf"
+        elif ema_nan:
+            reason = "EMA NaN/Inf"
+        elif fitness_nan:
+            reason = "Fitness NaN/Inf"
+        else:
+            reason = "Fitness collapse"
         if RANK != -1:  # DDP: broadcast to all ranks
-            broadcast_list = [corrupted if RANK == 0 else None]
-            dist.broadcast_object_list(broadcast_list, 0)
-            corrupted = broadcast_list[0]
+            corrupted = not self._all_ranks_true(not corrupted)
         if not corrupted:
             return False
         if epoch == self.start_epoch:
-            LOGGER.warning(f"{reason} detected but can not recover from last.pt...")
-            return False  # Cannot recover on first epoch, let training continue
+            raise RuntimeError(f"{reason} detected in the first epoch; no valid checkpoint is available for recovery")
         if not self.last.exists():
             raise RuntimeError(f"{reason} detected but no valid last.pt is available for recovery")
         self.nan_recovery_attempts += 1
@@ -1006,6 +1066,8 @@ class BaseTrainer:
         self._load_checkpoint_state(ckpt)  # Load optimizer/scaler/EMA/best_fitness
         del ckpt, ema, ema_state
         self.scheduler.last_epoch = epoch - 1
+        self.nonfinite_step_detected = False
+        self.nonfinite_step_reason = ""
         return True
 
     def resume_training(self, ckpt):

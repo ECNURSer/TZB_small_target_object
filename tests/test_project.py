@@ -10,14 +10,15 @@ from convert_to_yolo import CLASS_NAMES, convert_json, output_stem, write_data_y
 from experiment_results import append_result, metric_values, write_class_metrics
 from train import build_parser, load_config, validate_resume_checkpoint
 from tools.compare_models import mean, std
+from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.utils.loss import v8DetectionLoss
 
 
 def test_model_configs_use_official_yolo26_obb_weights():
     expected_runtime = {
-        "n": {"imgsz": 640, "batch": 144, "patience": 100, "save_period": 10},
-        "s": {"imgsz": 640, "batch": 288, "patience": 100, "save_period": 10},
-        "m": {"imgsz": 1024, "batch": 72, "patience": 200, "save_period": 50},
+        "n": {"imgsz": 640, "batch": 144, "patience": 100, "save_period": 10, "cos_lr": False},
+        "s": {"imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
+        "m": {"imgsz": 1024, "batch": 72, "patience": 200, "save_period": 100, "cos_lr": True},
     }
     for size in "nsm":
         config = load_config(size, 0)
@@ -26,18 +27,19 @@ def test_model_configs_use_official_yolo26_obb_weights():
         assert config["patience"] == expected_runtime[size]["patience"]
         assert config["imgsz"] == expected_runtime[size]["imgsz"]
         assert config["batch"] == expected_runtime[size]["batch"]
-        assert config["cos_lr"] is (size == "m")
+        assert config["cos_lr"] is expected_runtime[size]["cos_lr"]
         assert config["save"] is True
         assert config["save_period"] == expected_runtime[size]["save_period"]
-        assert config["plot_period"] == 50
+        assert config["plot_period"] == (100 if size == "m" else 50)
 
-    medium = load_config("m", 0)
-    assert medium["optimizer"] == "AdamW"
-    assert medium["cls_pw"] == 0.25
-    assert medium["focal_gamma"] == 1.5
-    assert medium["focal_alpha"] == 0.25
-    assert medium["mosaic"] == 0.25
-    assert medium["flipud"] == 0.5
+    for size in "sm":
+        config = load_config(size, 0)
+        assert config["optimizer"] == "AdamW"
+        assert config["cls_pw"] == 0.25
+        assert config["focal_gamma"] == 1.5
+        assert config["focal_alpha"] == 0.25
+        assert config["mosaic"] == 0.25
+        assert config["flipud"] == 0.5
 
 
 def test_balanced_focal_classification_loss():
@@ -55,6 +57,12 @@ def test_balanced_focal_classification_loss():
     focal = criterion.classification_loss(predictions, targets, 1)
     assert torch.isfinite(focal)
     assert 0 < focal < weighted_bce
+
+
+def test_nonfinite_tensor_detection():
+    assert BaseTrainer._tensors_finite([torch.tensor([1.0]), torch.tensor([2], dtype=torch.int64)])
+    assert not BaseTrainer._tensors_finite([torch.tensor([float("nan")])])
+    assert not BaseTrainer._tensors_finite([torch.tensor([float("inf")])])
 
 
 def test_training_cli_exposes_stopping_and_checkpoint_controls():

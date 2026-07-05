@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT="$(cd "$(dirname "$0")" && pwd)"
 ENV_NAME="${CONDA_ENV:-yolo26-obb}"
 export YOLO_CONFIG_DIR="$PROJECT/.ultralytics"
+export MPLBACKEND="${MPLBACKEND:-Agg}"
 mkdir -p "$YOLO_CONFIG_DIR"
 MODE="${1:-help}"
 shift || true

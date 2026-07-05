@@ -123,8 +123,8 @@ bash run.sh train-n --fold 0
 `configs/yolo26m_obb.yaml` 当前采用以下关键设置：
 
 ```text
-epochs=1500, imgsz=1024, batch=72, optimizer=AdamW, cos_lr=True
-patience=200, save_period=50
+epochs=500, imgsz=1024, batch=72, optimizer=AdamW, cos_lr=True
+patience=200, save_period=100
 focal_gamma=1.5, focal_alpha=0.25, cls_pw=0.25
 mosaic=0.25, scale=0.25, flipud=0.5, close_mosaic=50
 ```
@@ -136,6 +136,60 @@ mosaic=0.25, scale=0.25, flipud=0.5, close_mosaic=50
 ```bash
 bash run.sh train-m --fold 0 --name yolo26m_obb_fold0_balanced_focal
 ```
+
+### YOLO26m fold 0 最终结果
+
+本次实验实际完成 500 epoch，训练耗时 8.628 小时。训练结束时服务器环境错误地使用了 `TkAgg`，导致自动最终绘图退出；权重保存不受影响。2026-07-05 使用 `best.pt`、`imgsz=1024` 在 fold 0 验证集重新评估，评估集包含 1703 张图像和 86298 个实例。单卡评估的 `batch=18` 只影响资源占用，不影响精度指标。
+
+训练记录中最高 mAP50-95 出现在 epoch 414。`results.csv` 后段包含验证异常产生的零值和 NaN，因此 `results.png` 保留这些原始异常点；下表不采用最后一行，而以 `best.pt` 的独立复评结果为最终指标。
+
+| 权重 | Precision | Recall | F1 | mAP50 | mAP50-95 | 推理耗时/图 |
+|---|---:|---:|---:|---:|---:|---:|
+| `weights/best.pt` | 0.6494 | 0.5829 | 0.6143 | 0.5994 | 0.4463 | 10.61 ms |
+
+逐类别结果：
+
+| 类别 | 实例数 | Precision | Recall | F1 | mAP50 | mAP50-95 |
+|---|---:|---:|---:|---:|---:|---:|
+| Bus | 356 | 0.7494 | 0.6770 | 0.7113 | 0.7102 | 0.6019 |
+| Cargo Truck | 2983 | 0.7457 | 0.6527 | 0.6961 | 0.7079 | 0.5982 |
+| Dump Truck | 6452 | 0.6848 | 0.6841 | 0.6845 | 0.7205 | 0.5768 |
+| Excavator | 233 | 0.6223 | 0.6294 | 0.6259 | 0.6182 | 0.4721 |
+| Small Car | 37730 | 0.7074 | 0.7969 | 0.7495 | 0.8015 | 0.5255 |
+| Tractor | 27 | 0.5086 | 0.4603 | 0.4832 | 0.4059 | 0.3251 |
+| Trailer | 260 | 0.4999 | 0.3577 | 0.4170 | 0.3265 | 0.2696 |
+| Truck Tractor | 256 | 0.7744 | 0.6758 | 0.7218 | 0.7392 | 0.4889 |
+| Van | 36841 | 0.7226 | 0.7603 | 0.7410 | 0.7913 | 0.4754 |
+| other-vehicle | 1160 | 0.4789 | 0.1347 | 0.2103 | 0.1728 | 0.1300 |
+
+最终评估与绘图产物位于：
+
+```text
+runs/yolo26m_obb_fold0_balanced_focal/
+├── results.png                  # 500 epoch 训练曲线
+└── final_eval/
+    ├── metrics.json             # 总体指标
+    ├── class_metrics.csv         # 逐类别指标
+    ├── BoxPR_curve.png           # PR 曲线
+    ├── BoxP_curve.png            # Precision-Confidence 曲线
+    ├── BoxR_curve.png            # Recall-Confidence 曲线
+    ├── BoxF1_curve.png           # F1-Confidence 曲线
+    ├── confusion_matrix.png
+    ├── confusion_matrix_normalized.png
+    └── val_batch*_pred.jpg       # 验证集预测样例
+```
+
+服务器运行入口默认设置 `MPLBACKEND=Agg`，后续训练和评估可以在无桌面环境中正常保存图表。
+
+### 训练异常复盘
+
+epoch 415 后的指标归零不是正常过拟合，而是中间 batch 出现 NaN 后污染了 EMA，导致后续 EMA 验证失效。EMA、batch、AMP 的含义、故障时间线、当前恢复逻辑缺陷和下一次训练处理顺序见 [YOLO26m 训练异常复盘](docs/YOLO26M_TRAINING_INCIDENT.md)。
+
+训练器现已增加梯度、AMP、模型缓冲区和 EMA 的有限性检查，并支持 DDP 全 rank 同步回滚。下一次实验将全局 batch 降到 64；若仍可复现 NaN，再降到 48 或关闭 AMP 进行 FP32 对照。降低 batch 和关闭 AMP 只能降低数值异常概率，不能修复已经损坏的 EMA。
+
+### YOLO26s 对比实验配置
+
+YOLO26s 使用与 YOLO26m 相同的 fold 0 数据、`imgsz=1024`、500 epoch、AdamW、余弦学习率、balanced focal loss 和数据增强。全局 batch 使用 64，为 4 卡训练保留更多显存余量；每 50 epoch 保存周期权重。该实验用于与上述 YOLO26m `best.pt` 复评指标对比。
 
 ### 使用 tmux 后台训练
 
@@ -200,7 +254,7 @@ bash run.sh tensorboard \
 
 训练目录为 `runs/yolo26{n|s|m}_obb_fold{fold}/`。断点续训：
 
-配置默认启用早停；n/s 使用 `patience=100, save_period=10`，m 增强实验使用 `patience=200, save_period=50`。`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
+配置默认启用早停；n 使用 `patience=100, save_period=10`，s 对比实验使用 `patience=200, save_period=50`，m 增强实验使用 `patience=200, save_period=100`。`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
 
 ```bash
 python train.py --model n --fold 0 --resume

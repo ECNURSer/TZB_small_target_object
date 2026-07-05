@@ -19,7 +19,7 @@
 | 实验 | 模型 | Fold | ImgSz | 初始总 Batch | 状态 |
 |---|---|---:|---:|---:|---|
 | EXP-01 | yolo26n-obb.pt | 0 | 640 | 32 | 未运行 |
-| EXP-02 | yolo26s-obb.pt | 0 | 640 | 32 | 未运行 |
+| EXP-02 | yolo26s-obb.pt | 0 | 1024 | 64 | 待运行；与 YOLO26m balanced focal 配置对比 |
 | EXP-03 | yolo26m-obb.pt | 0 | 1024 | 72 | 待重新训练 |
 
 三种模型必须使用相同总 batch。若发生 OOM，将三者一起降到 16；不要让 TaskAlignedAssigner 回退到 CPU 后继续长时间训练。
