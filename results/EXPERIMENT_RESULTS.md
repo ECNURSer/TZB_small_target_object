@@ -1,10 +1,8 @@
 # 实验结果
 
-当前没有已完成实验。运行训练或独立 test 评估后执行：
+该文件由 `python tools/summarize_results.py` 生成。
 
-```bash
-python tools/summarize_results.py
-```
-
-生成的表格数据来源为 `results/experiments.csv`。
-
+| 时间(UTC) | 阶段 | 模型 | Fold | Split | mAP50 | mAP50-95 | Precision | Recall | Run |
+|---|---|---|---:|---|---:|---:|---:|---:|---|
+| 2026-07-05T14:23:40+00:00 | train_val | yolo26s-obb.pt | 0 | val | 0.5357 | 0.3938 | 0.6071 | 0.5039 | yolo26s_obb_fold0_balanced_focal_b64 |
+| 2026-07-05T14:23:40+00:00 | train_val | yolo26m-obb.pt | 0 | val | 0.5994 | 0.4463 | 0.6494 | 0.5829 | yolo26m_obb_fold0_balanced_focal |

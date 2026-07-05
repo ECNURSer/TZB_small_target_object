@@ -27,4 +27,4 @@
 
 2026-06-30 复核时，0-3 号卡正在被其他任务使用，4-7 号卡空闲。因此默认训练配置暂用 `device=4,5,6,7`，三种模型统一使用全局 `batch=32`。GPU 状态会变化，每次训练前必须先运行 `nvidia-smi`；若可用卡号变化，通过 `--device` 覆盖配置。
 
-当前 PyTorch wheel 使用 CUDA 12.6 runtime，驱动版本满足要求；不依赖系统 `nvcc`。`python tools/check_env.py` 与 `pip check` 均已通过。外部正式数据已经接入；batch 32 仍是保守起始值，尚未经过完整训练的显存峰值验证。
+当前 PyTorch wheel 使用 CUDA 12.6 runtime，驱动版本满足要求；不依赖系统 `nvcc`。`python tools/check_env.py` 与 `pip check` 均已通过。外部正式数据已经接入。YOLO26s 已使用全局 batch 64、imgsz 1024 完成 500 epoch，峰值显存约 30.8GB；下一轮 YOLO26n 同样使用 batch 64，并启用训练器 NaN/Inf 与 EMA 回滚保护。

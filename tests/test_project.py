@@ -16,14 +16,15 @@ from ultralytics.utils.loss import v8DetectionLoss
 
 def test_model_configs_use_official_yolo26_obb_weights():
     expected_runtime = {
-        "n": {"imgsz": 640, "batch": 144, "patience": 100, "save_period": 10, "cos_lr": False},
-        "s": {"imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
-        "m": {"imgsz": 1024, "batch": 72, "patience": 200, "save_period": 100, "cos_lr": True},
+        "n": {"epochs": 700, "imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
+        "s": {"epochs": 500, "imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
+        "m": {"epochs": 500, "imgsz": 1024, "batch": 72, "patience": 200, "save_period": 100, "cos_lr": True},
     }
     for size in "nsm":
         config = load_config(size, 0)
         assert config["task"] == "obb"
         assert config["model"] == f"yolo26{size}-obb.pt"
+        assert config["epochs"] == expected_runtime[size]["epochs"]
         assert config["patience"] == expected_runtime[size]["patience"]
         assert config["imgsz"] == expected_runtime[size]["imgsz"]
         assert config["batch"] == expected_runtime[size]["batch"]
@@ -32,7 +33,7 @@ def test_model_configs_use_official_yolo26_obb_weights():
         assert config["save_period"] == expected_runtime[size]["save_period"]
         assert config["plot_period"] == (100 if size == "m" else 50)
 
-    for size in "sm":
+    for size in "nsm":
         config = load_config(size, 0)
         assert config["optimizer"] == "AdamW"
         assert config["cls_pw"] == 0.25

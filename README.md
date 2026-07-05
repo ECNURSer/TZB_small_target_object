@@ -6,14 +6,15 @@
 - `yolo26s-obb.pt`
 - `yolo26m-obb.pt`
 
-源码基于 `ultralytics v8.4.80`，位于 `ultralytics_src/`。n/s 配置保持官方 OBB Loss；m 精度实验在官方 box、DFL 和 angle loss 不变的基础上，为分类分支增加了可选的 class-balanced Focal Loss。官方 YOLO26 OBB 权重在第一次训练时自动下载，三个模型均为 DOTAv1 预训练权重。
+源码基于 `ultralytics v8.4.80`，位于 `ultralytics_src/`。s/m 精度实验在官方 box、DFL 和 angle loss 不变的基础上，为分类分支增加了可选的 class-balanced Focal Loss。官方 YOLO26 OBB 权重在第一次训练时自动下载，三个模型均使用官方 OBB 预训练权重初始化。
 
 ## 当前状态
 
 - 项目代码和 Conda 环境脚本已建立。
 - `dataset` 符号链接指向 `/data/work1/00_data/TZB/subject1/dataset`，原图读取自同级 `input_path`；不复制 25GB 原图。
-- 当前已有 fold 0 的 YOLO26n 训练结果；该实验续训时修改过输入尺寸和 batch，只作为探索结果，不作为严格公平基线。
-- YOLO26m 当前是面向小目标和长尾类别的增强实验，使用 `imgsz=1024`、全局 batch 72、AdamW 和 class-balanced Focal Loss。
+- 原 YOLO26n 探索实验的 runs、日志和统一结果记录已删除，下一轮使用新的 700 epoch 优化配置重新训练。
+- YOLO26s 已完成 500 epoch 基线复评，作为 26n 参数选择和模型对比依据。
+- YOLO26m 已完成 fold 0 复评，mAP50 为 0.5994，mAP50-95 为 0.4463。
 - 独立 test 评估要求 `test.json` 中包含真实 OBB 标注；无标注测试集只能运行 `predict.py`。
 
 ## 目录结构
@@ -100,16 +101,11 @@ JSON 中 `data_path` 已是 `input_path/*.tif` 的绝对路径。转换默认创
 # 先查看空闲 GPU；当前复核时 4-7 号卡空闲
 nvidia-smi
 
-# fold 0 首轮公平对比：依次运行，三者参数保持一致
-python train.py --model n --fold 0 --device 4,5,6,7 --batch 32
-python train.py --model s --fold 0 --device 4,5,6,7 --batch 32
-python train.py --model m --fold 0 --device 4,5,6,7 --batch 32
+# 当前准备运行的 YOLO26n 优化实验
+bash run.sh train-n --fold 0 --name yolo26n_obb_fold0_balanced_focal_700ep_b64
 
 # 覆盖配置
 python train.py --model m --fold 0 --batch 32 --imgsz 1024 --device 0,1,2,3
-
-# 覆盖早停和周期权重保存间隔
-python train.py --model n --fold 0 --patience 50 --save-period 5
 
 # 仅检查最终参数和数据路径
 python train.py --model n --fold 0 --dry-run
@@ -185,11 +181,22 @@ runs/yolo26m_obb_fold0_balanced_focal/
 
 epoch 415 后的指标归零不是正常过拟合，而是中间 batch 出现 NaN 后污染了 EMA，导致后续 EMA 验证失效。EMA、batch、AMP 的含义、故障时间线、当前恢复逻辑缺陷和下一次训练处理顺序见 [YOLO26m 训练异常复盘](docs/YOLO26M_TRAINING_INCIDENT.md)。
 
-训练器现已增加梯度、AMP、模型缓冲区和 EMA 的有限性检查，并支持 DDP 全 rank 同步回滚。下一次实验将全局 batch 降到 64；若仍可复现 NaN，再降到 48 或关闭 AMP 进行 FP32 对照。降低 batch 和关闭 AMP 只能降低数值异常概率，不能修复已经损坏的 EMA。
+训练器现已增加梯度、AMP、模型缓冲区和 EMA 的有限性检查，并支持 DDP 全 rank 同步回滚。后续实验使用全局 batch 64；若仍可复现 NaN，再降到 48 或关闭 AMP 进行 FP32 对照。降低 batch 和关闭 AMP 只能降低数值异常概率，不能修复已经损坏的 EMA。
 
-### YOLO26s 对比实验配置
+### YOLO26n 优化实验配置
 
-YOLO26s 使用与 YOLO26m 相同的 fold 0 数据、`imgsz=1024`、500 epoch、AdamW、余弦学习率、balanced focal loss 和数据增强。全局 batch 使用 64，为 4 卡训练保留更多显存余量；每 50 epoch 保存周期权重。该实验用于与上述 YOLO26m `best.pt` 复评指标对比。
+已完成的 YOLO26s 500 epoch 基线在 fold 0 复评得到 Precision=0.6071、Recall=0.5039、F1=0.5507、mAP50=0.5357、mAP50-95=0.3938，最高训练记录出现在 epoch 486，说明 500 epoch 时仍有缓慢提升空间。
+
+新的 YOLO26n 配置参考上述 s/m 实测结果，使用 `epochs=700`、`imgsz=1024`、全局 `batch=64`、AdamW、余弦学习率和 balanced focal loss，并在最后 70 epoch 关闭 mosaic。核心 loss、输入尺寸、数据和增强策略与 s/m 实验一致；每 50 epoch 保存周期权重。
+
+当前复评对比：
+
+| 模型 | Epoch | mAP50 | mAP50-95 | Precision | Recall | 推理 ms/图 | 参数量 M |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| YOLO26s 基线 | 500 | 0.5357 | 0.3938 | 0.6071 | 0.5039 | 3.29 | 9.76 |
+| YOLO26m | 500 | 0.5994 | 0.4463 | 0.6494 | 0.5829 | 10.61 | 21.21 |
+
+YOLO26m 当前精度更高；YOLO26s 推理更快、参数量更小。700 epoch 的新 n 实验完成后，再把 n/s/m 一起纳入最终选择。
 
 ### 使用 tmux 后台训练
 
@@ -199,10 +206,10 @@ YOLO26s 使用与 YOLO26m 相同的 fold 0 数据、`imgsz=1024`、500 epoch、A
 nvidia-smi
 ```
 
-创建训练会话：
+创建 YOLO26n 训练会话：
 
 ```bash
-tmux new -s yolo26m_train
+tmux new -s yolo26n_train
 ```
 
 进入 tmux 后加载环境并启动训练，同时将终端输出保存到独立日志：
@@ -212,10 +219,10 @@ source /home/dihan/miniconda3/etc/profile.d/conda.sh
 conda activate yolo26-obb
 cd /home/dihan/TZB-subject1-YOLO26-OBBV1.0
 
-bash run.sh train-m \
+bash run.sh train-n \
   --fold 0 \
-  --name yolo26m_obb_fold0_balanced_focal \
-  2>&1 | tee /home/dihan/yolo26m_obb_fold0_balanced_focal.log
+  --name yolo26n_obb_fold0_balanced_focal_700ep_b64 \
+  2>&1 | tee /home/dihan/yolo26n_obb_fold0_balanced_focal_700ep_b64.log
 ```
 
 让训练留在后台并退出 tmux：先按 `Ctrl+B`，松开后再按 `D`。SSH 断开不会终止训练。
@@ -225,42 +232,42 @@ bash run.sh train-m \
 tmux ls
 
 # 重新进入训练会话
-tmux attach -t yolo26m_train
+tmux attach -t yolo26n_train
 
 # 不进入会话，直接查看训练日志
-tail -f /home/dihan/yolo26m_obb_fold0_balanced_focal.log
+tail -f /home/dihan/yolo26n_obb_fold0_balanced_focal_700ep_b64.log
 ```
 
 正常停止训练时，先进入会话再按 `Ctrl+C`，等待进程退出。仅在进程无法正常退出时强制删除会话：
 
 ```bash
-tmux kill-session -t yolo26m_train
+tmux kill-session -t yolo26n_train
 ```
 
 训练生成 events 文件后，可以创建单独的 TensorBoard 会话：
 
 ```bash
-tmux new -s yolo26m_tb
+tmux new -s yolo26n_tb
 source /home/dihan/miniconda3/etc/profile.d/conda.sh
 conda activate yolo26-obb
 cd /home/dihan/TZB-subject1-YOLO26-OBBV1.0
 
 bash run.sh tensorboard \
-  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26m_obb_fold0_balanced_focal \
+  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0_balanced_focal_700ep_b64 \
   --port 6007
 ```
 
-不要在同一组 GPU 上同时启动 n/s/m。显存不足时应把三个实验统一降到 `--batch 16`，保证比较条件一致。
+不要在同一组 GPU 上同时启动多个训练任务。若出现 OOM，优先把 YOLO26n 降到 `--batch 48`。
 
-训练目录为 `runs/yolo26{n|s|m}_obb_fold{fold}/`。断点续训：
+训练目录由 `--name` 决定。本次目录为 `runs/yolo26n_obb_fold0_balanced_focal_700ep_b64/`。断点续训：
 
-配置默认启用早停；n 使用 `patience=100, save_period=10`，s 对比实验使用 `patience=200, save_period=50`，m 增强实验使用 `patience=200, save_period=100`。`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
+配置默认启用早停；n 优化实验和 s 基线使用 `patience=200, save_period=50`，m 增强实验使用 `patience=200, save_period=100`。`last.pt` 持续覆盖最新状态，`best.pt` 在验证 fitness 提升时覆盖。
 
 ```bash
-python train.py --model n --fold 0 --resume
+python train.py --model n --fold 0 --name yolo26n_obb_fold0_balanced_focal_700ep_b64 --resume
 
 # 从指定的周期权重恢复
-python train.py --model n --fold 0 --resume runs/yolo26n_obb_fold0/weights/epoch100.pt
+python train.py --model n --fold 0 --resume runs/yolo26n_obb_fold0_balanced_focal_700ep_b64/weights/epoch100.pt
 ```
 
 训练完整结束后，Ultralytics 会 strip `last.pt`/`best.pt` 中的 optimizer 和 epoch 状态，此时二者只能用于评估或微调，不能断点续训。训练入口会检查 checkpoint 的 `epoch` 和 optimizer 状态；对已 strip 的权重执行 `--resume` 会直接报错，不会回退到默认数据集重新训练。若要扩展已完成实验，只能从仍含 optimizer 的最近 `epochN.pt` 恢复，并通过 `--epochs` 指定新的总轮数。
@@ -270,25 +277,25 @@ python train.py --model n --fold 0 --resume runs/yolo26n_obb_fold0/weights/epoch
 训练开始后，目标实验目录会生成 `events.out.tfevents.*`。TensorBoard 必须明确指定包含该文件的目录：
 
 ```bash
-# YOLO26n
+# YOLO26n 700 epoch 优化实验
 bash run.sh tensorboard \
-  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0 \
-  --port 6006
+  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0_balanced_focal_700ep_b64 \
+  --port 6007
 
 # 等价的原生命令
 tensorboard \
-  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0 \
-  --port 6006 --bind_all
+  --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0_balanced_focal_700ep_b64 \
+  --port 6007 --bind_all
 
-# 浏览器访问 http://服务器地址:6006
+# 浏览器访问 http://服务器地址:6007
 ```
 
-YOLO26s 和 YOLO26m 分别将 `--logdir` 改为 `runs/yolo26s_obb_fold0` 和 `runs/yolo26m_obb_fold0`。`run.sh` 会检查目录和 events 文件；未开始训练时会明确报错。
+`run.sh` 会检查目录和 events 文件；新实验尚未生成 events 文件时会明确报错。
 
 如果服务器端口不对外开放，可通过 SSH 转发：
 
 ```bash
-ssh -L 6006:localhost:6006 user@server
+ssh -L 6007:localhost:6007 user@server
 ```
 
 当前 Ultralytics 版本无法稳定 trace YOLO26 OBB 的字典输出，因此项目关闭了 TensorBoard model graph tracing；训练 loss、学习率、Precision、Recall 和 mAP 标量监控保持启用。
@@ -298,14 +305,14 @@ ssh -L 6006:localhost:6006 user@server
 `runs/` 只保存运行产物，不保存源码或原始数据。正式训练后每个实验目录通常包含：
 
 ```text
-runs/yolo26n_obb_fold0/
+runs/yolo26n_obb_fold0_balanced_focal_700ep_b64/
 ├── events.out.tfevents.*      # TensorBoard 标量日志
 ├── args.yaml                  # 本次训练的完整参数
 ├── results.csv                # 每个 epoch 的 loss 和评估指标
 ├── weights/
 │   ├── best.pt                # 验证指标最优权重
 │   ├── last.pt                # 最新训练状态
-│   └── epoch*.pt              # 每 10 轮保存的周期权重
+│   └── epoch*.pt              # 每 50 轮保存的周期权重
 ├── val_class_metrics.csv      # 逐类别验证指标
 └── *.png / *.jpg              # 曲线、混淆矩阵和样本可视化
 ```
@@ -314,7 +321,7 @@ runs/yolo26n_obb_fold0/
 
 ## n/s/m 单折对比与最终选择
 
-1. 只在 fold 0 分别训练 n/s/m，训练参数、数据、seed、输入尺寸和 batch 必须一致。
+1. 当前结果表已有 fold 0 的 s/m；新的 26n 实验完成后加入同一结果表。
 2. 汇总 fold 0 验证结果，不用 test 集反复调参：
 
 ```bash
@@ -332,8 +339,8 @@ bash run.sh compare --stage train_val --output results/FOLD0_MODEL_COMPARISON.md
 
 ```bash
 python evaluate_test.py \
-  --model n --fold 0 \
-  --weights runs/yolo26n_obb_fold0/weights/best.pt \
+  --model m --fold 0 \
+  --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt \
   --device 0
 ```
 
@@ -341,7 +348,7 @@ python evaluate_test.py \
 
 ```bash
 python predict.py \
-  --weights runs/yolo26n_obb_fold0/weights/best.pt \
+  --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt \
   --source /path/to/images \
   --device 0
 ```
