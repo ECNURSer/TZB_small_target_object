@@ -21,7 +21,7 @@ def fmt(value: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="将统一实验 CSV 生成为 Markdown 表")
     parser.add_argument("--input", type=Path, default=PROJECT_ROOT / "results" / "experiments.csv")
-    parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "results" / "EXPERIMENT_RESULTS.md")
+    parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "results" / "TRAINING_DIAGNOSTICS.md")
     args = parser.parse_args()
     csv_path = args.input.expanduser().resolve()
     output = args.output.expanduser().resolve()
@@ -31,9 +31,9 @@ def main() -> None:
         rows = list(csv.DictReader(stream))
 
     lines = [
-        "# 实验结果",
+        "# Ultralytics 训练诊断指标",
         "",
-        "该文件由 `python tools/summarize_results.py` 生成。",
+        "该文件由 `python tools/summarize_results.py` 生成，不代替比赛 F1 结果。",
         "",
         "| 时间(UTC) | 阶段 | 模型 | Fold | Split | mAP50 | mAP50-95 | Precision | Recall | Run |",
         "|---|---|---|---:|---|---:|---:|---:|---:|---|",

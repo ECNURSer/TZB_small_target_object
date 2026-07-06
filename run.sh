@@ -21,6 +21,9 @@ case "$MODE" in
     test)
         run_python "$PROJECT/evaluate_test.py" "$@"
         ;;
+    competition)
+        run_python "$PROJECT/evaluate_competition.py" "$@"
+        ;;
     predict)
         run_python "$PROJECT/predict.py" "$@"
         ;;
@@ -66,21 +69,17 @@ case "$MODE" in
     summary)
         run_python "$PROJECT/tools/summarize_results.py"
         ;;
-    compare)
-        run_python "$PROJECT/tools/compare_models.py" "$@"
-        ;;
     help|*)
         cat <<'EOF'
 用法:
   bash run.sh train-n --fold 0
   bash run.sh train-s --fold 0
   bash run.sh train-m --fold 0
-  bash run.sh tensorboard --logdir /home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26n_obb_fold0
-  bash run.sh tensorboard --logdir runs/yolo26s_obb_fold0 --port 6007
-  bash run.sh test --model n --fold 0 --weights runs/yolo26n_obb_fold0/weights/best.pt
-  bash run.sh predict --weights runs/yolo26n_obb_fold0/weights/best.pt --source image.tif
+  bash run.sh tensorboard --logdir runs/yolo26n_obb_fold0_balanced_focal_700ep_b64 --port 6007
+  bash run.sh test --model m --fold 0 --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --imgsz 1024 --device 7
+  bash run.sh competition --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --device 7 --imgsz 1280 --max-det 600 --cache runs/competition/m.json --output runs/competition/m_metrics.json
+  bash run.sh predict --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --source image.tif --device 7
   bash run.sh summary
-  bash run.sh compare --stage test
 EOF
         ;;
 esac

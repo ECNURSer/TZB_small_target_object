@@ -9,7 +9,6 @@ import yaml
 from convert_to_yolo import CLASS_NAMES, convert_json, output_stem, write_data_yaml
 from experiment_results import append_result, metric_values, write_class_metrics
 from train import build_parser, load_config, validate_resume_checkpoint
-from tools.compare_models import mean, std
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.utils.loss import v8DetectionLoss
 
@@ -134,10 +133,3 @@ def test_result_table(tmp_path: Path):
     class_table = tmp_path / "classes.csv"
     write_class_metrics(Metrics(), class_table)
     assert "vehicle" in class_table.read_text()
-
-
-def test_comparison_statistics_handle_missing_optional_metrics():
-    rows = [{"map50_95": "0.4", "inference_ms": ""}, {"map50_95": "0.6", "inference_ms": ""}]
-    assert mean(rows, "map50_95") == 0.5
-    assert std(rows, "map50_95") > 0
-    assert str(mean(rows, "inference_ms")) == "nan"

@@ -5,6 +5,7 @@
 /runs/
 /training_logs/
 /results/*.csv
+/results/TRAINING_DIAGNOSTICS.md
 events.out.tfevents.*
 *.cache
 *.log

@@ -21,8 +21,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="YOLO26 OBB 独立推理")
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--source", required=True)
-    parser.add_argument("--imgsz", type=int, default=640)
-    parser.add_argument("--conf", type=float, default=0.25)
+    parser.add_argument("--imgsz", type=int, default=1280)
+    parser.add_argument("--conf", type=float, default=0.32508015632629395)
+    parser.add_argument("--max-det", type=int, default=600)
     parser.add_argument("--device", default="0")
     parser.add_argument("--name", default="predict")
     args = parser.parse_args()
@@ -34,6 +35,7 @@ def main() -> None:
         source=args.source,
         imgsz=args.imgsz,
         conf=args.conf,
+        max_det=args.max_det,
         device=args.device,
         project=str(PROJECT_ROOT / "runs" / "predict"),
         name=args.name,

@@ -23,8 +23,8 @@
 | PyTorch CUDA runtime | 12.6 |
 | Ultralytics | 8.4.80，本项目 `ultralytics_src/` |
 
-## 当前限制
+## 运行说明
 
-2026-06-30 复核时，0-3 号卡正在被其他任务使用，4-7 号卡空闲。因此默认训练配置暂用 `device=4,5,6,7`，三种模型统一使用全局 `batch=32`。GPU 状态会变化，每次训练前必须先运行 `nvidia-smi`；若可用卡号变化，通过 `--device` 覆盖配置。
+训练配置默认使用 `device=4,5,6,7`，这只是本服务器的默认值，不代表这些 GPU 始终空闲。每次运行前必须先检查 `nvidia-smi`，并用 `--device` 覆盖当时不可用的卡。已完成实验的全局 batch 为 n=64、s=64、m=72，均使用 `imgsz=1024`。
 
-当前 PyTorch wheel 使用 CUDA 12.6 runtime，驱动版本满足要求；不依赖系统 `nvcc`。`python tools/check_env.py` 与 `pip check` 均已通过。外部正式数据已经接入。YOLO26s 已使用全局 batch 64、imgsz 1024 完成 500 epoch，峰值显存约 30.8GB；下一轮 YOLO26n 同样使用 batch 64，并启用训练器 NaN/Inf 与 EMA 回滚保护。
+PyTorch wheel 使用 CUDA 12.6 runtime，当前驱动满足要求，不依赖系统 `nvcc`。环境可通过 `python tools/check_env.py` 和 `python -m pip check` 重新验证。
