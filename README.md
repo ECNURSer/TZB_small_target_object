@@ -84,7 +84,7 @@ python convert_to_yolo.py --all
 
 ## 训练
 
-三个配置都使用 AdamW、cosine LR、`degrees=15`、`mixup=0`、`mosaic=0.25`、AMP 和 balanced focal。默认 GPU 为 4-7 号卡，必须根据当时资源通过 `--device` 覆盖。
+n/s 保留原基线配置。新的 YOLO26m 全量单模型方案使用 1500 epoch、`imgsz=1280`、8 卡全局 batch 96、AdamW、cosine LR、`degrees=180`、`mixup=0`、`mosaic=0.25`、AMP 和 balanced focal。默认 GPU 为 0-7 号八张卡，必须在运行前确认全部空闲。
 
 ```bash
 # 检查最终参数，不加载权重、不训练
@@ -96,8 +96,20 @@ bash run.sh train-s --fold 0 --name yolo26s_obb_fold0_balanced_focal_b64
 bash run.sh train-m --fold 0 --name yolo26m_obb_fold0_balanced_focal
 
 # 命令行覆盖资源参数
-python train.py --model m --fold 0 --batch 64 --device 4,5,6,7
+python train.py --model m --fold 0 --batch 96 --device 0,1,2,3,4,5,6,7
 ```
+
+### YOLO26m 全量单模型训练
+
+fold0-4 的 train+val 并集都是同一批 8495 张开发集图像，只是五种不同划分，不能将五折直接合并训练，否则会重复样本。当前固定 fold0：train 6792 张、val 1703 张、独立 test 944 张。只训练一个模型，`--no-test` 会生成不含 test 字段的运行时 YAML。
+
+```bash
+bash run.sh train-m \
+  --fold 0 --no-test \
+  --name yolo26m_obb_full_fold0_img1280_deg180_1500ep_b96
+```
+
+学习率从 `lr0=0.0012` 经 5 epoch warmup 后使用 cosine 调度到 `6e-6`。由于总轮数为 1500，epoch 700 时学习率仍约为 `6.7e-4`，不会像 700 epoch 总计划那样已接近最低学习率。`patience=300` 允许验证指标长时间平台，最后 150 epoch 关闭 mosaic 做稳定收敛。
 
 早停由 `patience` 控制。`last.pt` 保存最新状态，`best.pt` 在验证 fitness 提升时覆盖，`save_period` 额外保留 `epochN.pt`。
 
@@ -201,6 +213,7 @@ bash run.sh predict \
 ## 文档
 
 - [docs/EXPERIMENT_PLAN.md](docs/EXPERIMENT_PLAN.md)：比赛优化顺序和未完成任务。
+- [docs/OVERFIT72_TEST.md](docs/OVERFIT72_TEST.md)：YOLO26m 的 72 图小集过拟合能力测试。
 - [docs/SYSTEM_INFO.md](docs/SYSTEM_INFO.md)：服务器、CUDA 和 Python 环境。
 - [docs/YOLO26M_TRAINING_INCIDENT.md](docs/YOLO26M_TRAINING_INCIDENT.md)：YOLO26m epoch 415 后 EMA/NaN 异常复盘。
 - [results/COMPETITION_RESULTS.md](results/COMPETITION_RESULTS.md)：n/s/m、参数搜索和独立 test 结果。

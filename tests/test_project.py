@@ -8,7 +8,7 @@ import yaml
 
 from convert_to_yolo import CLASS_NAMES, convert_json, output_stem, write_data_yaml
 from experiment_results import append_result, metric_values, write_class_metrics
-from train import build_parser, load_config, validate_resume_checkpoint
+from train import build_parser, load_config, validate_resume_checkpoint, write_trainval_only_data
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.utils.loss import v8DetectionLoss
 
@@ -17,7 +17,7 @@ def test_model_configs_use_official_yolo26_obb_weights():
     expected_runtime = {
         "n": {"epochs": 700, "imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
         "s": {"epochs": 500, "imgsz": 1024, "batch": 64, "patience": 200, "save_period": 50, "cos_lr": True},
-        "m": {"epochs": 500, "imgsz": 1024, "batch": 72, "patience": 200, "save_period": 100, "cos_lr": True},
+        "m": {"epochs": 1500, "imgsz": 1280, "batch": 96, "patience": 300, "save_period": 50, "cos_lr": True},
     }
     for size in "nsm":
         config = load_config(size, 0)
@@ -30,7 +30,7 @@ def test_model_configs_use_official_yolo26_obb_weights():
         assert config["cos_lr"] is expected_runtime[size]["cos_lr"]
         assert config["save"] is True
         assert config["save_period"] == expected_runtime[size]["save_period"]
-        assert config["plot_period"] == (100 if size == "m" else 50)
+        assert config["plot_period"] == 50
 
     for size in "nsm":
         config = load_config(size, 0)
@@ -40,6 +40,15 @@ def test_model_configs_use_official_yolo26_obb_weights():
         assert config["focal_alpha"] == 0.25
         assert config["mosaic"] == 0.25
         assert config["flipud"] == 0.5
+
+    full_m = load_config("m", 0)
+    assert full_m["lr0"] == 0.0012
+    assert full_m["workers"] == 8
+    assert full_m["device"] == "0,1,2,3,4,5,6,7"
+    assert full_m["lrf"] == 0.005
+    assert full_m["warmup_epochs"] == 5.0
+    assert full_m["close_mosaic"] == 150
+    assert full_m["degrees"] == 180.0
 
 
 def test_balanced_focal_classification_loss():
@@ -73,6 +82,21 @@ def test_training_cli_exposes_stopping_and_checkpoint_controls():
     assert args.patience == 12
     assert args.save_period == 3
     assert args.resume == "checkpoint.pt"
+
+
+def test_trainval_only_data_removes_test_split(tmp_path: Path, monkeypatch):
+    data_path = tmp_path / "data.yaml"
+    data_path.write_text(
+        yaml.safe_dump({"path": ".", "train": "train/images", "val": "val/images", "test": "test/images"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("train.YOLO_CONFIG_ROOT", tmp_path / "runtime")
+    output = write_trainval_only_data(data_path, fold=3)
+    runtime_data = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert runtime_data["train"] == "train/images"
+    assert runtime_data["val"] == "val/images"
+    assert "test" not in runtime_data
+    assert Path(runtime_data["path"]).is_absolute()
 
 
 def test_resume_checkpoint_validation(tmp_path: Path):

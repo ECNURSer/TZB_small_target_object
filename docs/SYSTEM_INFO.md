@@ -25,6 +25,6 @@
 
 ## 运行说明
 
-训练配置默认使用 `device=4,5,6,7`，这只是本服务器的默认值，不代表这些 GPU 始终空闲。每次运行前必须先检查 `nvidia-smi`，并用 `--device` 覆盖当时不可用的卡。已完成实验的全局 batch 为 n=64、s=64、m=72，均使用 `imgsz=1024`。
+新的 m 全量单模型配置使用 8 张 GPU：`device=0,1,2,3,4,5,6,7`、`imgsz=1280`、全局 `batch=96`（每卡 12）。运行前必须先检查 `nvidia-smi`，确认八张卡全部空闲。历史基线的全局 batch 为 n=64、s=64、m=72，使用 `imgsz=1024`。
 
 PyTorch wheel 使用 CUDA 12.6 runtime，当前驱动满足要求，不依赖系统 `nvcc`。环境可通过 `python tools/check_env.py` 和 `python -m pip check` 重新验证。

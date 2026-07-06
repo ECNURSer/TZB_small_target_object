@@ -33,6 +33,23 @@ def load_config(size: str, fold: int) -> dict:
     return config
 
 
+def write_trainval_only_data(data_path: Path, fold: int) -> Path:
+    """Write a runtime data YAML containing train/val only, with no test path."""
+    with data_path.open(encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    if not isinstance(data, dict) or not data.get("train") or not data.get("val"):
+        raise ValueError(f"数据配置必须包含 train 和 val: {data_path}")
+    root = Path(data.get("path", data_path.parent))
+    if not root.is_absolute():
+        root = (data_path.parent / root).resolve()
+    data["path"] = str(root)
+    data.pop("test", None)
+    output = YOLO_CONFIG_ROOT / "train_data" / f"fold_{fold}_trainval.yaml"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return output
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="训练官方 YOLO26 OBB 模型")
     parser.add_argument("--model", choices=("n", "s", "m"), default="n", help="模型规模")
@@ -48,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fraction", type=float)
     parser.add_argument("--cache", choices=("ram", "disk"))
     parser.add_argument("--name")
+    parser.add_argument("--no-test", action="store_true", help="生成仅含 train/val 的运行时 data.yaml")
     parser.add_argument(
         "--resume",
         nargs="?",
@@ -98,6 +116,10 @@ def main() -> None:
     data_path = Path(config["data"])
     if not data_path.is_file():
         raise FileNotFoundError(f"数据配置不存在: {data_path}。请先运行 python convert_to_yolo.py --all")
+    if args.no_test:
+        data_path = write_trainval_only_data(data_path.resolve(), args.fold)
+        config["data"] = str(data_path)
+        print(f"数据泄漏保护: 已移除 test split，训练仅可访问 train/val: {data_path}")
     if config["patience"] < 0:
         raise ValueError("patience 必须大于或等于 0")
     if config["save_period"] == 0 or config["save_period"] < -1:
