@@ -1,0 +1,123 @@
+{
+  "metric": "class-aware F1@polygon-IoU0.3",
+  "matching": "predictions sorted by confidence; same class; one GT matched at most once",
+  "threshold_mode": "fixed",
+  "fixed_conf": 0.32303857803344727,
+  "score": {
+    "confidence": 0.32303857803344727,
+    "tp": 36452,
+    "fp": 10684,
+    "fn": 11097,
+    "precision": 0.773336727766463,
+    "recall": 0.766619697575133,
+    "f1": 0.7699635633944131
+  },
+  "per_class": {
+    "Bus": {
+      "confidence": 0.32303857803344727,
+      "tp": 125,
+      "fp": 28,
+      "fn": 46,
+      "precision": 0.8169934640522876,
+      "recall": 0.7309941520467836,
+      "f1": 0.7716049382716049
+    },
+    "Cargo Truck": {
+      "confidence": 0.32303857803344727,
+      "tp": 984,
+      "fp": 342,
+      "fn": 452,
+      "precision": 0.7420814479638009,
+      "recall": 0.6852367688022284,
+      "f1": 0.7125271542360608
+    },
+    "Dump Truck": {
+      "confidence": 0.32303857803344727,
+      "tp": 2277,
+      "fp": 771,
+      "fn": 845,
+      "precision": 0.7470472440944882,
+      "recall": 0.7293401665598975,
+      "f1": 0.7380875202593193
+    },
+    "Excavator": {
+      "confidence": 0.32303857803344727,
+      "tp": 99,
+      "fp": 33,
+      "fn": 25,
+      "precision": 0.75,
+      "recall": 0.7983870967741935,
+      "f1": 0.7734375
+    },
+    "Small Car": {
+      "confidence": 0.32303857803344727,
+      "tp": 16932,
+      "fp": 4872,
+      "fn": 4374,
+      "precision": 0.7765547605943863,
+      "recall": 0.7947057166995213,
+      "f1": 0.7855254001391788
+    },
+    "Tractor": {
+      "confidence": 0.32303857803344727,
+      "tp": 12,
+      "fp": 4,
+      "fn": 15,
+      "precision": 0.75,
+      "recall": 0.4444444444444444,
+      "f1": 0.5581395348837209
+    },
+    "Trailer": {
+      "confidence": 0.32303857803344727,
+      "tp": 73,
+      "fp": 19,
+      "fn": 68,
+      "precision": 0.7934782608695652,
+      "recall": 0.5177304964539007,
+      "f1": 0.6266094420600858
+    },
+    "Truck Tractor": {
+      "confidence": 0.32303857803344727,
+      "tp": 12,
+      "fp": 5,
+      "fn": 12,
+      "precision": 0.7058823529411765,
+      "recall": 0.5,
+      "f1": 0.5853658536585366
+    },
+    "Van": {
+      "confidence": 0.32303857803344727,
+      "tp": 15828,
+      "fp": 4508,
+      "fn": 4705,
+      "precision": 0.778324154209284,
+      "recall": 0.7708566697511323,
+      "f1": 0.7745724142993466
+    },
+    "other-vehicle": {
+      "confidence": 0.32303857803344727,
+      "tp": 110,
+      "fp": 102,
+      "fn": 555,
+      "precision": 0.5188679245283019,
+      "recall": 0.16541353383458646,
+      "f1": 0.2508551881413911
+    }
+  },
+  "total_ground_truths": 47549,
+  "prediction_cache": {
+    "weights": "/home/dihan/TZB-subject1-YOLO26-OBBV1.0/runs/yolo26m_obb_full_fold0_img1280_deg180_1500ep_b96-4/weights/best.pt",
+    "imgsz": 1280,
+    "min_conf": 0.05,
+    "nms_iou": 0.7,
+    "max_det": 600,
+    "image_count": 944,
+    "wall_seconds": 142.55884439699003
+  },
+  "score_max_det": 600,
+  "speed_ms_per_image": {
+    "preprocess": 11.586303949223879,
+    "inference": 18.334001148243754,
+    "postprocess": 1.3466003368394321
+  }
+}
