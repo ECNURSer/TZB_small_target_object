@@ -1,0 +1,43 @@
+# LSKNet-S backbone + Ultralytics P2-P5 OBB head.
+# The LSKNet backbone is adapted from https://github.com/zcablii/LSKNet (CC BY-NC 4.0).
+nc: 10
+reg_max: 16
+end2end: false
+pretrained_backbone: https://huggingface.co/GreatBird/LSKNet/resolve/main/lsk_s_backbone.pth.tar?download=true
+pretrained_filename: lsk_s_backbone.pth.tar
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, LSKNet, [[64, 128, 320, 512], [8, 8, 4, 4], [2, 2, 4, 2], 0.1, 0.1]]
+  - [0, 1, Index, [64, 0]]   # 1-P2/4
+  - [0, 1, Index, [128, 1]]  # 2-P3/8
+  - [0, 1, Index, [320, 2]]  # 3-P4/16
+  - [0, 1, Index, [512, 3]]  # 4-P5/32
+
+head:
+  - [4, 1, SPPF, [512, 5]]
+  - [-1, 1, nn.Upsample, [null, 2, nearest]]
+  - [[-1, 3], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, false]]
+
+  - [-1, 1, nn.Upsample, [null, 2, nearest]]
+  - [[-1, 2], 1, Concat, [1]]
+  - [-1, 2, C3k2, [128, false]]
+
+  - [-1, 1, nn.Upsample, [null, 2, nearest]]
+  - [[-1, 1], 1, Concat, [1]]
+  - [-1, 2, C3k2, [64, false]]   # 14-P2/4
+
+  - [-1, 1, Conv, [64, 3, 2]]
+  - [[-1, 11], 1, Concat, [1]]
+  - [-1, 2, C3k2, [128, false]]  # 17-P3/8
+
+  - [-1, 1, Conv, [128, 3, 2]]
+  - [[-1, 8], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, false]]  # 20-P4/16
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 5], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, true]]   # 23-P5/32
+
+  - [[14, 17, 20, 23], 1, OBB, [nc, 1]]

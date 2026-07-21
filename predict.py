@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run standalone YOLO26 OBB inference on images, directories, or videos."""
+"""Run standalone OBB inference on images, directories, or videos."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from ultralytics import YOLO  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="YOLO26 OBB 独立推理")
+    parser = argparse.ArgumentParser(description="OBB 模型独立推理")
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--source", required=True)
     parser.add_argument("--imgsz", type=int, default=1280)

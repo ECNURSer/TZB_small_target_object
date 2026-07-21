@@ -33,16 +33,17 @@ def main() -> None:
     lines = [
         "# Ultralytics 训练诊断指标",
         "",
-        "该文件由 `python tools/summarize_results.py` 生成，不代替比赛 F1 结果。",
+        "该文件由 `python tools/summarize_results.py` 生成。LSKNet 行包含训练期 val 的比赛对齐 F1；正式结果仍以独立比赛评估 JSON 为准。",
         "",
-        "| 时间(UTC) | 阶段 | 模型 | Fold | Split | mAP50 | mAP50-95 | Precision | Recall | Run |",
-        "|---|---|---|---:|---|---:|---:|---:|---:|---|",
+        "| 时间(UTC) | 阶段 | 模型 | Fold | Split | mAP50 | mAP50-95 | Precision | Recall | F1@0.3 | Conf | Run |",
+        "|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
             f"| {row['timestamp_utc']} | {row['stage']} | {row['model']} | {row['fold']} | {row['split']} "
             f"| {fmt(row['map50'])} | {fmt(row['map50_95'])} | {fmt(row['precision'])} "
-            f"| {fmt(row['recall'])} | {row['run_name']} |"
+            f"| {fmt(row['recall'])} | {fmt(row.get('competition_f1_03', ''))} "
+            f"| {fmt(row.get('competition_conf', ''))} | {row['run_name']} |"
         )
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(output)

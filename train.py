@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train official Ultralytics YOLO26 OBB n/s/m models."""
+"""Train YOLO26 or LSKNet-backbone OBB models."""
 
 from __future__ import annotations
 
@@ -16,17 +16,27 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 YOLO_CONFIG_ROOT = PROJECT_ROOT / ".ultralytics"
 YOLO_CONFIG_ROOT.mkdir(exist_ok=True)
 os.environ.setdefault("YOLO_CONFIG_DIR", str(YOLO_CONFIG_ROOT))
+python_paths = [str(PROJECT_ROOT), str(PROJECT_ROOT / "ultralytics_src")]
+if os.environ.get("PYTHONPATH"):
+    python_paths.append(os.environ["PYTHONPATH"])
+os.environ["PYTHONPATH"] = os.pathsep.join(python_paths)
 sys.path.insert(0, str(PROJECT_ROOT / "ultralytics_src"))
 
 from ultralytics import YOLO  # noqa: E402
 
 from experiment_results import append_result, metric_values, write_class_metrics  # noqa: E402
 from tensorboard_support import enable_tensorboard_scalars  # noqa: E402
+from lsknet_support import LSKNetOBBTrainer  # noqa: E402
 
 
-def load_config(size: str, fold: int) -> dict:
-    """Load a model-size configuration and attach the selected fold dataset."""
-    config_path = PROJECT_ROOT / "configs" / f"yolo26{size}_obb.yaml"
+def load_config(model_name: str, fold: int) -> dict:
+    """Load a model configuration and attach the selected fold dataset."""
+    filename = (
+        f"{model_name.replace('-', '_')}_obb.yaml"
+        if model_name.startswith("lsknet-")
+        else f"yolo26{model_name}_obb.yaml"
+    )
+    config_path = PROJECT_ROOT / "configs" / filename
     with config_path.open(encoding="utf-8") as stream:
         config = yaml.safe_load(stream)
     config["data"] = str(PROJECT_ROOT / "dataset_yolo" / f"fold_{fold}" / "data.yaml")
@@ -51,8 +61,13 @@ def write_trainval_only_data(data_path: Path, fold: int) -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="训练官方 YOLO26 OBB 模型")
-    parser.add_argument("--model", choices=("n", "s", "m"), default="n", help="模型规模")
+    parser = argparse.ArgumentParser(description="训练 YOLO26 或 LSKNet OBB 模型")
+    parser.add_argument(
+        "--model",
+        choices=("n", "s", "m", "lsknet-t", "lsknet-s"),
+        default="n",
+        help="YOLO26 规模，或 LSKNet-T/S 骨干模型",
+    )
     parser.add_argument("--fold", type=int, choices=range(5), default=0, help="交叉验证 fold")
     parser.add_argument("--data", type=Path, help="覆盖默认 fold data.yaml，用于检查或自定义数据")
     parser.add_argument("--epochs", type=int)
@@ -74,6 +89,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--results-csv", type=Path, default=PROJECT_ROOT / "results" / "experiments.csv")
     parser.add_argument("--dry-run", action="store_true", help="只检查并打印最终配置")
+    parser.add_argument(
+        "--pretrained-backbone",
+        help="LSKNet 官方骨干权重的本地路径或 URL；传 none 可禁用，默认使用模型 YAML 中的官方地址",
+    )
     return parser
 
 
@@ -95,7 +114,8 @@ def main() -> None:
     config = load_config(args.model, args.fold)
     if args.data is not None:
         config["data"] = str(args.data.expanduser().resolve())
-    run_name = args.name or f"yolo26{args.model}_obb_fold{args.fold}"
+    family = args.model.replace("-", "_") if args.model.startswith("lsknet-") else f"yolo26{args.model}"
+    run_name = args.name or f"{family}_obb_fold{args.fold}"
     config.update(project=str(PROJECT_ROOT / "runs"), name=run_name)
 
     for key in (
@@ -139,6 +159,8 @@ def main() -> None:
         raise ValueError("plot_period 必须大于或等于 0")
     os.environ["YOLO_PLOT_PERIOD"] = str(plot_period)
     enable_tensorboard_scalars()
+    if args.pretrained_backbone is not None:
+        os.environ["LSKNET_PRETRAINED"] = args.pretrained_backbone
     if args.resume:
         last_pt = (
             PROJECT_ROOT / "runs" / run_name / "weights" / "last.pt"
@@ -156,10 +178,15 @@ def main() -> None:
         }
         if args.epochs is not None:
             resume_overrides["epochs"] = args.epochs
-        metrics = model.train(resume=True, **resume_overrides)
+        trainer = LSKNetOBBTrainer if args.model.startswith("lsknet-") else None
+        metrics = model.train(resume=True, trainer=trainer, **resume_overrides)
     else:
-        model = YOLO(config.pop("model"))
-        metrics = model.train(**config)
+        model_path = Path(config.pop("model"))
+        if not model_path.is_absolute() and args.model.startswith("lsknet-"):
+            model_path = PROJECT_ROOT / model_path
+        model = YOLO(str(model_path))
+        trainer = LSKNetOBBTrainer if args.model.startswith("lsknet-") else None
+        metrics = model.train(trainer=trainer, **config)
 
     save_dir = Path(model.trainer.save_dir)
     best_pt = save_dir / "weights" / "best.pt"
@@ -170,7 +197,7 @@ def main() -> None:
         {
             "stage": "train_val",
             "run_name": run_name,
-            "model": f"yolo26{args.model}-obb.pt",
+            "model": args.model,
             "fold": args.fold,
             "split": "val",
             "epochs": config.get("epochs", "resume"),
@@ -181,6 +208,11 @@ def main() -> None:
             "results_dir": str(save_dir),
             **metric_values(metrics),
         },
+    )
+    values = metric_values(metrics)
+    (save_dir / "val_metrics.json").write_text(
+        json.dumps(values, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
     )
     print(f"训练完成: {save_dir}")
     print(f"TensorBoard: tensorboard --logdir {PROJECT_ROOT / 'runs'} --port 6006")

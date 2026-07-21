@@ -94,6 +94,7 @@ from .head import (
     YOLOESegment26,
     v10Detect,
 )
+from .lsknet import LSKNet
 from .transformer import (
     AIFI,
     MLP,
@@ -161,6 +162,7 @@ __all__ = (
     "ImagePoolingAttn",
     "Index",
     "LRPCHead",
+    "LSKNet",
     "LayerNorm2d",
     "LightConv",
     "MLPBlock",

@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import sys
 
 import cv2
 import numpy as np
@@ -7,7 +10,8 @@ import torch.nn as nn
 import yaml
 
 from convert_to_yolo import CLASS_NAMES, convert_json, output_stem, write_data_yaml
-from experiment_results import append_result, metric_values, write_class_metrics
+from experiment_results import RESULT_FIELDS, append_result, metric_values, write_class_metrics
+from ultralytics.nn.modules import LSKNet
 from train import build_parser, load_config, validate_resume_checkpoint, write_trainval_only_data
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.utils.loss import v8DetectionLoss
@@ -51,6 +55,43 @@ def test_model_configs_use_official_yolo26_obb_weights():
     assert full_m["degrees"] == 180.0
 
 
+def test_lsknet_configs_use_p2_head_and_competition_validation_settings():
+    for variant, batch in (("lsknet-t", 16), ("lsknet-s", 8)):
+        config = load_config(variant, 0)
+        assert config["task"] == "obb"
+        assert config["model"] == f"configs/models/{variant.replace('-', '_')}_obb.yaml"
+        assert config["imgsz"] == 1280
+        assert config["batch"] == batch
+        assert config["device"] == "4,5,6,7"
+        assert config["optimizer"] == "AdamW"
+        assert config["conf"] == 0.05
+        assert config["iou"] == 0.7
+        assert config["max_det"] == 600
+        model_yaml = yaml.safe_load((Path(config["model"])).read_text(encoding="utf-8"))
+        assert model_yaml["backbone"][0][2] == "LSKNet"
+        assert model_yaml["head"][-1][0] == [14, 17, 20, 23]
+        assert model_yaml["head"][-1][2] == "OBB"
+        assert "huggingface.co/GreatBird/LSKNet" in model_yaml["pretrained_backbone"]
+
+
+def test_lsknet_backbone_feature_shapes():
+    model = LSKNet(
+        embed_dims=[8, 16, 24, 32],
+        mlp_ratios=[2, 2, 2, 2],
+        depths=[1, 1, 1, 1],
+        drop_rate=0.0,
+        drop_path_rate=0.0,
+    ).eval()
+    with torch.no_grad():
+        features = model(torch.zeros(1, 3, 64, 64))
+    assert [tuple(feature.shape) for feature in features] == [
+        (1, 8, 16, 16),
+        (1, 16, 8, 8),
+        (1, 24, 4, 4),
+        (1, 32, 2, 2),
+    ]
+
+
 def test_balanced_focal_classification_loss():
     criterion = v8DetectionLoss.__new__(v8DetectionLoss)
     criterion.bce = nn.BCEWithLogitsLoss(reduction="none")
@@ -82,6 +123,23 @@ def test_training_cli_exposes_stopping_and_checkpoint_controls():
     assert args.patience == 12
     assert args.save_period == 3
     assert args.resume == "checkpoint.pt"
+    assert build_parser().parse_args(["--model", "lsknet-t"]).model == "lsknet-t"
+
+
+def test_ddp_subprocess_can_import_project_trainer_from_an_external_directory(tmp_path: Path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from lsknet_support import LSKNetOBBTrainer; print(LSKNetOBBTrainer.__name__)",
+        ],
+        cwd=tmp_path,
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "LSKNetOBBTrainer"
 
 
 def test_trainval_only_data_removes_test_split(tmp_path: Path, monkeypatch):
@@ -157,3 +215,22 @@ def test_result_table(tmp_path: Path):
     class_table = tmp_path / "classes.csv"
     write_class_metrics(Metrics(), class_table)
     assert "vehicle" in class_table.read_text()
+
+
+def test_result_table_migrates_old_header_and_records_competition_metrics(tmp_path: Path):
+    table = tmp_path / "experiments.csv"
+    table.write_text("timestamp_utc,stage,run_name\nold,test,baseline\n", encoding="utf-8")
+    append_result(
+        table,
+        {
+            "stage": "train_val",
+            "run_name": "lsknet_t",
+            "competition_f1_03": 0.75,
+            "competition_conf": 0.3,
+        },
+    )
+    with table.open(encoding="utf-8") as stream:
+        rows = list(__import__("csv").DictReader(stream))
+    assert list(rows[0]) == RESULT_FIELDS
+    assert rows[0]["run_name"] == "baseline"
+    assert rows[1]["competition_f1_03"] == "0.75"

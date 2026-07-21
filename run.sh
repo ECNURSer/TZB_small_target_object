@@ -5,6 +5,7 @@ PROJECT="$(cd "$(dirname "$0")" && pwd)"
 ENV_NAME="${CONDA_ENV:-yolo26-obb}"
 export YOLO_CONFIG_DIR="$PROJECT/.ultralytics"
 export MPLBACKEND="${MPLBACKEND:-Agg}"
+export PYTHONPATH="$PROJECT:$PROJECT/ultralytics_src${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$YOLO_CONFIG_DIR"
 MODE="${1:-help}"
 shift || true
@@ -18,6 +19,10 @@ case "$MODE" in
         SIZE="${MODE#train-}"
         run_python "$PROJECT/train.py" --model "$SIZE" "$@"
         ;;
+    train-lsk-t|train-lsk-s)
+        SIZE="${MODE#train-}"
+        run_python "$PROJECT/train.py" --model "lsknet-${SIZE#lsk-}" "$@"
+        ;;
     test)
         run_python "$PROJECT/evaluate_test.py" "$@"
         ;;
@@ -26,6 +31,9 @@ case "$MODE" in
         ;;
     predict)
         run_python "$PROJECT/predict.py" "$@"
+        ;;
+    predict-lsk-t)
+        run_python "$PROJECT/predict_lsknet.py" "$@"
         ;;
     tensorboard)
         LOGDIR=""
@@ -72,14 +80,17 @@ case "$MODE" in
     help|*)
         cat <<'EOF'
 用法:
-  bash run.sh train-n --fold 0
-  bash run.sh train-s --fold 0
-  bash run.sh train-m --fold 0
-  bash run.sh tensorboard --logdir runs/yolo26n_obb_fold0_balanced_focal_700ep_b64 --port 6007
-  bash run.sh test --model m --fold 0 --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --imgsz 1024 --device 7
-  bash run.sh competition --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --device 7 --imgsz 1280 --max-det 600 --cache runs/competition/m.json --output runs/competition/m_metrics.json
-  bash run.sh predict --weights runs/yolo26m_obb_fold0_balanced_focal/weights/best.pt --source image.tif --device 7
-  bash run.sh summary
+  bash tmux_job.sh start yolo26n_train logs/yolo26n_train.log bash run.sh train-n --fold 0
+  bash tmux_job.sh start yolo26s_train logs/yolo26s_train.log bash run.sh train-s --fold 0
+  bash tmux_job.sh start yolo26m_train logs/yolo26m_train.log bash run.sh train-m --fold 0
+  bash tmux_job.sh start lsknet_t_train logs/lsknet_t_train.log bash run.sh train-lsk-t --fold 0
+  bash tmux_job.sh start lsknet_s_train logs/lsknet_s_train.log bash run.sh train-lsk-s --fold 0
+  bash tmux_job.sh start tensorboard logs/tensorboard.log bash run.sh tensorboard --logdir runs/lsknet_t_obb_fold0 --port 6007
+  bash tmux_job.sh start test logs/test.log bash run.sh test --model lsknet-t --fold 0 --weights runs/lsknet_t_obb_fold0/weights/best.pt --imgsz 1280 --device 7
+  bash tmux_job.sh start competition logs/competition.log bash run.sh competition --weights runs/lsknet_t_obb_fold0/weights/best.pt --device 7 --imgsz 1280 --max-det 600 --cache runs/competition/lsk_t.json --output runs/competition/lsk_t_metrics.json
+  bash tmux_job.sh start predict logs/predict.log bash run.sh predict --weights runs/lsknet_t_obb_fold0/weights/best.pt --source image.tif --device 7
+  bash tmux_job.sh start predict_lsk logs/predict_lsk.log bash run.sh predict-lsk-t --source image.tif --device 7
+  bash tmux_job.sh start summary logs/summary.log bash run.sh summary
 EOF
         ;;
 esac

@@ -27,6 +27,10 @@ RESULT_FIELDS = [
     "map50",
     "map50_95",
     "fitness",
+    "competition_precision",
+    "competition_recall",
+    "competition_f1_03",
+    "competition_conf",
     "inference_ms",
     "params_m",
     "results_dir",
@@ -47,6 +51,7 @@ def metric_values(metrics: Any) -> dict[str, float | str]:
     recall = pick("metrics/recall(B)", "metrics/recall(M)")
     f1 = 2 * precision * recall / (precision + recall) if precision != "" and recall != "" and precision + recall else 0.0
     speed = getattr(metrics, "speed", {}) or {}
+    competition = getattr(metrics, "competition_score", None)
     return {
         "precision": precision,
         "recall": recall,
@@ -54,6 +59,10 @@ def metric_values(metrics: Any) -> dict[str, float | str]:
         "map50": pick("metrics/mAP50(B)", "metrics/mAP50(M)"),
         "map50_95": pick("metrics/mAP50-95(B)", "metrics/mAP50-95(M)"),
         "fitness": pick("fitness"),
+        "competition_precision": float(competition.precision) if competition is not None else "",
+        "competition_recall": float(competition.recall) if competition is not None else "",
+        "competition_f1_03": float(competition.f1) if competition is not None else "",
+        "competition_conf": float(competition.confidence) if competition is not None else "",
         "inference_ms": float(speed["inference"]) if "inference" in speed else "",
     }
 
@@ -80,6 +89,17 @@ def append_result(csv_path: Path, row: dict[str, Any]) -> None:
 
     with csv_path.open("a+", newline="", encoding="utf-8") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        stream.seek(0)
+        reader = csv.DictReader(stream)
+        existing_rows = list(reader)
+        existing_fields = reader.fieldnames or []
+        if existing_fields and existing_fields != RESULT_FIELDS:
+            stream.seek(0)
+            stream.truncate()
+            migrated = csv.DictWriter(stream, fieldnames=RESULT_FIELDS)
+            migrated.writeheader()
+            for existing in existing_rows:
+                migrated.writerow({field: existing.get(field, "") for field in RESULT_FIELDS})
         stream.seek(0, 2)
         writer = csv.DictWriter(stream, fieldnames=RESULT_FIELDS)
         if stream.tell() == 0:

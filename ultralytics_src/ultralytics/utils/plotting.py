@@ -948,7 +948,12 @@ def plot_results(file: str = "path/to/results.csv", dir: str = "", on_plot: Call
                 columns = (
                     loss_keys[:loss_mid] + metric_keys[:metric_mid] + loss_keys[loss_mid:] + metric_keys[metric_mid:]
                 )
-                fig, ax = plt.subplots(2, len(columns) // 2, figsize=(len(columns) + 2, 6), tight_layout=True)
+                fig, ax = plt.subplots(
+                    2,
+                    (len(columns) + 1) // 2,
+                    figsize=(len(columns) + 2, 6),
+                    tight_layout=True,
+                )
                 ax = ax.ravel()
             x = data.select(data.columns[0]).to_numpy().flatten()
             for i, j in enumerate(columns):
@@ -956,6 +961,8 @@ def plot_results(file: str = "path/to/results.csv", dir: str = "", on_plot: Call
                 ax[i].plot(x, y, marker=".", label=f.stem, linewidth=2, markersize=8)  # actual results
                 ax[i].plot(x, _gaussian_filter1d(y, sigma=3), ":", label="smooth", linewidth=2)  # smoothing line
                 ax[i].set_title(j, fontsize=12)
+            for unused in ax[len(columns) :]:
+                unused.set_visible(False)
         except Exception as e:
             LOGGER.error(f"Plotting error for {f}: {e}")
     if ax is not None:

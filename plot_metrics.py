@@ -20,7 +20,18 @@ def main() -> None:
     data.columns = [column.strip() for column in data.columns]
     columns = [
         name
-        for name in ("train/box_loss", "train/cls_loss", "val/box_loss", "val/cls_loss", "metrics/mAP50(B)", "metrics/mAP50-95(B)")
+        for name in (
+            "train/box_loss",
+            "train/cls_loss",
+            "val/box_loss",
+            "val/cls_loss",
+            "metrics/mAP50(B)",
+            "metrics/mAP50-95(B)",
+            "metrics/competition_precision(B)",
+            "metrics/competition_recall(B)",
+            "metrics/F1@0.3(B)",
+            "metrics/best_conf@0.3(B)",
+        )
         if name in data.columns
     ]
     if not columns:
@@ -41,4 +52,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

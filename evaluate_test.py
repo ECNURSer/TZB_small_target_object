@@ -23,11 +23,11 @@ from experiment_results import append_result, metric_values, write_class_metrics
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="YOLO26 OBB 独立 test 集评估")
+    parser = argparse.ArgumentParser(description="OBB 模型独立 test 集诊断评估")
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--fold", type=int, choices=range(5), default=0)
     parser.add_argument("--data", type=Path, help="覆盖默认 fold data.yaml")
-    parser.add_argument("--model", choices=("n", "s", "m"), required=True)
+    parser.add_argument("--model", choices=("n", "s", "m", "lsknet-t", "lsknet-s"), required=True)
     parser.add_argument("--imgsz", type=int, default=1024)
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--device", default="0")
@@ -50,7 +50,8 @@ def main() -> None:
     if not data_config.get("test"):
         raise ValueError(f"数据配置没有独立 test 路径: {data}")
 
-    run_name = args.name or f"test_yolo26{args.model}_obb_fold{args.fold}"
+    family = args.model.replace("-", "_") if args.model.startswith("lsknet-") else f"yolo26{args.model}"
+    run_name = args.name or f"test_{family}_obb_fold{args.fold}"
     model = YOLO(str(weights))
     metrics = model.val(
         data=str(data),
@@ -70,7 +71,7 @@ def main() -> None:
         {
             "stage": "test",
             "run_name": run_name,
-            "model": f"yolo26{args.model}-obb.pt",
+            "model": args.model,
             "fold": args.fold,
             "split": "test",
             "imgsz": args.imgsz,
